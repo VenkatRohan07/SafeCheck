@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SafeCheck</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>SafeCheck: URL &amp; File Safety Scanner</h1>
+      <p class="sub">Real-time safety checks powered by VirusTotal, URLhaus &amp; AbuseIPDB</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="url-tab">Check a URL</button>
+      <button class="tab-btn" data-tab="file-tab">Check a File</button>
+      <button class="tab-btn" data-tab="history-tab">History</button>
+    </div>
+
+    <section id="url-tab" class="tab-panel active">
+      <form id="url-form">
+        <input type="url" id="url-input" placeholder="https://example.com" required />
+        <button type="submit">Scan URL</button>
+      </form>
+    </section>
+
+    <section id="file-tab" class="tab-panel">
+      <form id="file-form">
+        <div id="dropzone" class="dropzone">
+          <p>Drag &amp; drop a file here, or click to choose</p>
+          <input type="file" id="file-input" hidden />
+        </div>
+        <button type="submit">Scan File</button>
+      </form>
+    </section>
+
+    <section id="history-tab" class="tab-panel">
+      <button id="refresh-history">Refresh</button>
+      <table id="history-table">
+        <thead>
+          <tr><th>Target</th><th>Type</th><th>Verdict</th><th>When</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <div id="result" class="result hidden"></div>
+    <div id="loading" class="loading hidden">Scanning…</div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
