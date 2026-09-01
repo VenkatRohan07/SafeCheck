@@ -4,7 +4,7 @@ A simple web dashboard (Flask) that checks whether a URL or file is safe by
 querying real threat-intel sources: **VirusTotal**, **URLhaus**, and
 **AbuseIPDB**.
 
-**Render link: https://newerp.kluniversity.in/ **
+**Render link:** https://newerp.kluniversity.in/
 
 ## Features
 - Paste a URL → checked against VirusTotal's 70+ engine scan, URLhaus's
