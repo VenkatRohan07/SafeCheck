@@ -3,6 +3,14 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 const resultBox = document.getElementById("result");
 const loadingBox = document.getElementById("loading");
 
+function formatDateTime(isoString) {
+  const d = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, "0");
+  const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${date} ${time}`;
+}
+
 tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     tabButtons.forEach((b) => b.classList.remove("active"));
@@ -117,9 +125,7 @@ async function loadHistory() {
   tbody.innerHTML = rows
     .map(
       (r) =>
-        `<tr><td>${r.target}</td><td>${r.target_type}</td><td>${r.verdict}</td><td>${new Date(
-          r.scanned_at
-        ).toLocaleString()}</td></tr>`
+        `<tr><td>${r.target}</td><td>${r.target_type}</td><td>${r.verdict}</td><td>${formatDateTime(r.scanned_at)}</td></tr>`
     )
     .join("");
 }
