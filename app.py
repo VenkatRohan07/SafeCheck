@@ -77,7 +77,7 @@ def save_scan(target, target_type, verdict, detail):
     db = get_db()
     db.execute(
         "INSERT INTO scans (target, target_type, verdict, detail, scanned_at) VALUES (?, ?, ?, ?, ?)",
-        (target, target_type, verdict, detail, datetime.utcnow().isoformat()),
+        (target, target_type, verdict, detail, datetime.utcnow().isoformat() + "Z"),
     )
     db.commit()
 
