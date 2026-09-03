@@ -16,6 +16,7 @@ import base64
 import hashlib
 import sqlite3
 import socket
+import json
 from datetime import datetime
 
 import requests
@@ -224,9 +225,53 @@ def abuseipdb_check_host(hostname):
 
 
 # ---------------------------------------------------------------
-# Verdict combiner
+# AI heuristic checker (catches threats not yet in any database)
 # ---------------------------------------------------------------
-def combine_verdict(vt=None, urlhaus=None, abuseipdb=None):
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+def ai_url_heuristic(url):
+    """Ask an LLM to judge the URL's structure for phishing indicators,
+    independent of any threat database. Catches brand-new/zero-day URLs."""
+    if not GROQ_API_KEY:
+        return {"skipped": "GROQ_API_KEY not set"}
+
+    system_prompt = (
+        "You are a phishing-URL structural analyst. You do NOT have internet "
+        "access and cannot look anything up — judge ONLY the URL's structure: "
+        "brand impersonation (lookalike domains), suspicious TLDs, IP-address "
+        "hosts, excessive subdomains, misleading characters, URL shorteners, "
+        "suspicious keywords like login/verify/secure/account paired with "
+        "unrelated domains. Respond with ONLY valid JSON, no other text: "
+        '{"risk_score": <0-100 integer>, "flags": [<short strings>], '
+        '"reasoning": "<one sentence>"}'
+    )
+
+    try:
+        r = requests.post(
+            GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": url},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 200,
+            },
+            timeout=15,
+        )
+        content = r.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except (requests.RequestException, KeyError, ValueError) as e:
+        return {"error": str(e)}
+
+
+def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, ai=None):
     flags = 0
     reasons = []
 
@@ -247,6 +292,15 @@ def combine_verdict(vt=None, urlhaus=None, abuseipdb=None):
         if score >= 50:
             flags += 1
             reasons.append(f"AbuseIPDB: host abuse score {score}")
+
+    if ai and not ai.get("error") and not ai.get("skipped"):
+        risk = ai.get("risk_score", 0)
+        if risk >= 70:
+            flags += 2
+            reasons.append(f"AI heuristic: {ai.get('reasoning', 'high-risk URL structure')}")
+        elif risk >= 40:
+            flags += 1
+            reasons.append(f"AI heuristic: {ai.get('reasoning', 'suspicious URL structure')}")
 
     if flags >= 2:
         verdict = "Malicious"
@@ -277,8 +331,9 @@ def scan_url():
 
     hostname = url.split("//")[-1].split("/")[0].split(":")[0]
     abuseipdb_result = abuseipdb_check_host(hostname)
+    ai_result = ai_url_heuristic(url)
 
-    verdict, reasons = combine_verdict(vt_result, urlhaus_result, abuseipdb_result)
+    verdict, reasons = combine_verdict(vt_result, urlhaus_result, abuseipdb_result, ai_result)
     save_scan(url, "url", verdict, "; ".join(reasons))
 
     return jsonify(
@@ -289,8 +344,10 @@ def scan_url():
             "virustotal": vt_result,
             "urlhaus": urlhaus_result,
             "abuseipdb": abuseipdb_result,
+            "ai_heuristic": ai_result,
         }
     )
+
 
 
 @app.route("/scan/file", methods=["POST"])
