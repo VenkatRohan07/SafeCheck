@@ -266,6 +266,13 @@ def ai_url_heuristic(url):
             timeout=15,
         )
         content = r.json()["choices"][0]["message"]["content"]
+        # Strip markdown code fences if the model added them despite instructions
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        content = content.strip()
         return json.loads(content)
     except (requests.RequestException, KeyError, ValueError) as e:
         return {"error": str(e)}
