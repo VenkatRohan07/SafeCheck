@@ -261,7 +261,9 @@ def ai_url_heuristic(url):
                     {"role": "user", "content": url},
                 ],
                 "temperature": 0.2,
-                "max_tokens": 200,
+                "max_completion_tokens": 500,
+                "reasoning_effort": "low",
+                "reasoning_format": "hidden",
             },
             timeout=15,
         )
