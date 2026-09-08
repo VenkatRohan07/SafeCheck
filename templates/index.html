@@ -3,52 +3,98 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SafeCheck</title>
-<link rel="icon" type="image/png" href="{{ url_for('static', filename='fevicon.png') }}">
+<title>SafeCheck — URL &amp; File Safety Scanner</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>SafeCheck: URL &amp; File Safety Scanner</h1>
-      <p class="sub">Real-time safety checks powered by VirusTotal, URLhaus &amp; AbuseIPDB</p>
+  <div class="console">
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 4 L54 12 V30 C54 45 44 55 32 60 C20 55 10 45 10 30 V12 Z" fill="var(--accent)" stroke="#0a2a26" stroke-width="2"/>
+          <path d="M20 32 L28 40 L45 22" fill="none" stroke="#06110f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <h1 class="sweep">SafeCheck</h1>
+          <p class="tagline">Real-time URL &amp; file threat analysis</p>
+        </div>
+      </div>
+      <div class="source-pills">
+        <span class="pill">VirusTotal</span>
+        <span class="pill">URLhaus</span>
+        <span class="pill">AbuseIPDB</span>
+      </div>
     </header>
 
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="url-tab">Check a URL</button>
-      <button class="tab-btn" data-tab="file-tab">Check a File</button>
-      <button class="tab-btn" data-tab="history-tab">History</button>
-    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="url-tab" role="tab" aria-selected="true">
+        <span class="tab-index">01</span> Check a URL
+      </button>
+      <button class="tab-btn" data-tab="file-tab" role="tab" aria-selected="false">
+        <span class="tab-index">02</span> Check a file
+      </button>
+      <button class="tab-btn" data-tab="history-tab" role="tab" aria-selected="false">
+        <span class="tab-index">03</span> Scan log
+      </button>
+    </nav>
 
-    <section id="url-tab" class="tab-panel active">
-      <form id="url-form">
-        <input type="url" id="url-input" placeholder="https://example.com" required />
-        <button type="submit">Scan URL</button>
-      </form>
-    </section>
+    <main>
+      <section id="url-tab" class="tab-panel active" role="tabpanel">
+        <form id="url-form" class="prompt-form">
+          <div class="prompt">
+            <span class="prompt-caret">&gt;</span>
+            <input type="url" id="url-input" placeholder="paste a url to check" required autocomplete="off" />
+          </div>
+          <button type="submit" class="run-btn">
+            <span class="run-label">Run scan</span>
+          </button>
+        </form>
+      </section>
 
-    <section id="file-tab" class="tab-panel">
-      <form id="file-form">
-        <div id="dropzone" class="dropzone">
-          <p>Drag &amp; drop a file here, or click to choose</p>
-          <input type="file" id="file-input" hidden />
+      <section id="file-tab" class="tab-panel" role="tabpanel">
+        <form id="file-form" class="prompt-form">
+          <div id="dropzone" class="dropzone" tabindex="0">
+            <svg class="drop-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3v12m0-12 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p class="drop-label">Drop a file here, or click to choose</p>
+            <p class="drop-sub">Never executed — hashed and checked only</p>
+            <input type="file" id="file-input" hidden />
+          </div>
+          <button type="submit" class="run-btn">
+            <span class="run-label">Run scan</span>
+          </button>
+        </form>
+      </section>
+
+      <section id="history-tab" class="tab-panel" role="tabpanel">
+        <div class="log-header">
+          <p class="log-caption">Last 20 scans</p>
+          <button id="refresh-history" class="ghost-btn">Refresh</button>
         </div>
-        <button type="submit">Scan File</button>
-      </form>
-    </section>
+        <div class="log-table-wrap">
+          <table id="history-table">
+            <thead>
+              <tr><th>Target</th><th>Type</th><th>Verdict</th><th>When</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-    <section id="history-tab" class="tab-panel">
-      <button id="refresh-history">Refresh</button>
-      <table id="history-table">
-        <thead>
-          <tr><th>Target</th><th>Type</th><th>Verdict</th><th>When</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+      <div id="loading" class="loading hidden">
+        <span class="loading-bar"></span>
+        <span class="loading-text">Scanning</span>
+      </div>
 
-    <div id="result" class="result hidden"></div>
-    <div id="loading" class="loading hidden">Scanning…</div>
+      <div id="result" class="result hidden"></div>
+    </main>
+
   </div>
 
   <script src="{{ url_for('static', filename='script.js') }}"></script>
