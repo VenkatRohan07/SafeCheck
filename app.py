@@ -27,6 +27,9 @@ from flask import Flask, request, jsonify, render_template, g
 # ---------------------------------------------------------------
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
 ABUSEIPDB_API_KEY = os.environ.get("ABUSEIPDB_API_KEY", "")
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
+NEWS_CACHE = {"articles": [], "fetched_at": 0}
+NEWS_CACHE_TTL = 1800  # 30 minutes
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 URLHAUS_BASE = "https://urlhaus-api.abuse.ch/v1"
@@ -263,6 +266,43 @@ def abuseipdb_check_host(hostname):
     except requests.RequestException as e:
         return {"error": str(e)}
 
+def fetch_security_news():
+    """Fetches recent cybersecurity headlines, cached for 30 minutes
+    to stay well within NewsAPI's free-tier daily request limit."""
+    now = time.time()
+    if NEWS_CACHE["articles"] and (now - NEWS_CACHE["fetched_at"] < NEWS_CACHE_TTL):
+        return NEWS_CACHE["articles"]
+
+    if not NEWS_API_KEY:
+        return []
+
+    try:
+        r = requests.get(
+            "https://newsapi.org/v2/everything",
+            params={
+                "q": "cybersecurity OR data breach OR malware",
+                "language": "en",
+                "sortBy": "publishedAt",
+                "pageSize": 5,
+                "apiKey": NEWS_API_KEY,
+            },
+            timeout=10,
+        )
+        data = r.json()
+        articles = [
+            {
+                "title": a["title"],
+                "source": a["source"]["name"],
+                "url": a["url"],
+            }
+            for a in data.get("articles", [])
+            if a.get("title") and a.get("url")
+        ]
+        NEWS_CACHE["articles"] = articles
+        NEWS_CACHE["fetched_at"] = now
+        return articles
+    except (requests.RequestException, KeyError, ValueError):
+        return NEWS_CACHE["articles"]  # serve stale cache if the API call fails
 
 
 def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, magic=None):
@@ -385,6 +425,9 @@ def scan_file():
         }
     )
 
+@app.route("/news")
+def news():
+    return jsonify(fetch_security_news())
 
 @app.route("/history")
 def history():
