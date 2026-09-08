@@ -181,6 +181,46 @@ def vt_upload_file(filepath):
             }
     return {"error": "VT analysis timed out"}
 
+# ---------------------------------------------------------------
+# Magic byte / file signature checker
+# ---------------------------------------------------------------
+MAGIC_SIGNATURES = {
+    ".pdf": [b"%PDF"],
+    ".png": [b"\x89PNG\r\n\x1a\n"],
+    ".jpg": [b"\xff\xd8\xff"],
+    ".jpeg": [b"\xff\xd8\xff"],
+    ".gif": [b"GIF87a", b"GIF89a"],
+    ".zip": [b"PK\x03\x04"],
+    ".docx": [b"PK\x03\x04"],
+    ".xlsx": [b"PK\x03\x04"],
+    ".pptx": [b"PK\x03\x04"],
+    ".exe": [b"MZ"],
+    ".dll": [b"MZ"],
+    ".rar": [b"Rar!"],
+    ".7z": [b"7z\xbc\xaf\x27\x1c"],
+}
+
+def check_magic_bytes(filepath, filename):
+    """Compares the file's actual binary signature against what its
+    extension claims. A mismatch is a classic sign of a disguised
+    malicious file (e.g. 'invoice.pdf' that's really an .exe)."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in MAGIC_SIGNATURES:
+        return {"checked": False, "reason": "no known signature for this file type"}
+
+    with open(filepath, "rb") as f:
+        header = f.read(16)
+
+    expected_signatures = MAGIC_SIGNATURES[ext]
+    is_match = any(header.startswith(sig) for sig in expected_signatures)
+
+    return {
+        "checked": True,
+        "match": is_match,
+        "claimed_extension": ext,
+        "actual_header_hex": header[:8].hex(),
+    }
+    
 
 # ---------------------------------------------------------------
 # URLhaus helper
@@ -224,63 +264,8 @@ def abuseipdb_check_host(hostname):
         return {"error": str(e)}
 
 
-# ---------------------------------------------------------------
-# AI heuristic checker (catches threats not yet in any database)
-# ---------------------------------------------------------------
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-def ai_url_heuristic(url):
-    """Ask an LLM to judge the URL's structure for phishing indicators,
-    independent of any threat database. Catches brand-new/zero-day URLs."""
-    if not GROQ_API_KEY:
-        return {"skipped": "GROQ_API_KEY not set"}
-
-    system_prompt = (
-        "You are a phishing-URL structural analyst. You do NOT have internet "
-        "access and cannot look anything up — judge ONLY the URL's structure: "
-        "brand impersonation (lookalike domains), suspicious TLDs, IP-address "
-        "hosts, excessive subdomains, misleading characters, URL shorteners, "
-        "suspicious keywords like login/verify/secure/account paired with "
-        "unrelated domains. Respond with ONLY valid JSON, no other text: "
-        '{"risk_score": <0-100 integer>, "flags": [<short strings>], '
-        '"reasoning": "<one sentence>"}'
-    )
-
-    try:
-        r = requests.post(
-            GROQ_URL,
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "openai/gpt-oss-20b",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": url},
-                ],
-                "temperature": 0.2,
-                "max_completion_tokens": 500,
-                "reasoning_effort": "low",
-                "reasoning_format": "hidden",
-            },
-            timeout=15,
-        )
-        content = r.json()["choices"][0]["message"]["content"]
-        # Strip markdown code fences if the model added them despite instructions
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
-        return json.loads(content)
-    except (requests.RequestException, KeyError, ValueError) as e:
-        return {"error": str(e)}
-
-
-def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, ai=None):
+def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, magic=None):
     flags = 0
     reasons = []
 
@@ -302,14 +287,12 @@ def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, ai=None):
             flags += 1
             reasons.append(f"AbuseIPDB: host abuse score {score}")
 
-    if ai and not ai.get("error") and not ai.get("skipped"):
-        risk = ai.get("risk_score", 0)
-        if risk >= 70:
-            flags += 2
-            reasons.append(f"AI heuristic: {ai.get('reasoning', 'high-risk URL structure')}")
-        elif risk >= 40:
-            flags += 1
-            reasons.append(f"AI heuristic: {ai.get('reasoning', 'suspicious URL structure')}")
+    if magic and magic.get("checked") and not magic.get("match"):
+        flags += 2
+        reasons.append(
+            f"File signature mismatch: claims to be {magic.get('claimed_extension')} "
+            f"but header doesn't match (possible disguised file)"
+        )
 
     if flags >= 2:
         verdict = "Malicious"
@@ -338,11 +321,10 @@ def scan_url():
     vt_result = vt_check_url(url)
     urlhaus_result = urlhaus_check_url(url)
 
-    hostname = url.split("//")[-1].split("/")[0].split(":")[0]
+        hostname = url.split("//")[-1].split("/")[0].split(":")[0]
     abuseipdb_result = abuseipdb_check_host(hostname)
-    ai_result = ai_url_heuristic(url)
 
-    verdict, reasons = combine_verdict(vt_result, urlhaus_result, abuseipdb_result, ai_result)
+    verdict, reasons = combine_verdict(vt_result, urlhaus_result, abuseipdb_result)
     save_scan(url, "url", verdict, "; ".join(reasons))
 
     return jsonify(
@@ -353,10 +335,8 @@ def scan_url():
             "virustotal": vt_result,
             "urlhaus": urlhaus_result,
             "abuseipdb": abuseipdb_result,
-            "ai_heuristic": ai_result,
         }
     )
-
 
 
 @app.route("/scan/file", methods=["POST"])
@@ -376,11 +356,13 @@ def scan_file():
         os.remove(filepath)
         return jsonify({"error": "File exceeds 32MB limit for this scanner"}), 400
 
-    sha256 = hashlib.sha256()
+        sha256 = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
     file_hash = sha256.hexdigest()
+
+    magic_result = check_magic_bytes(filepath, uploaded.filename)
 
     vt_result = vt_check_file_hash(file_hash)
     if vt_result.get("not_found"):
@@ -389,7 +371,7 @@ def scan_file():
     # Never execute the file. Delete it once we've hashed/scanned it.
     os.remove(filepath)
 
-    verdict, reasons = combine_verdict(vt=vt_result)
+    verdict, reasons = combine_verdict(vt=vt_result, magic=magic_result)
     save_scan(uploaded.filename, "file", verdict, "; ".join(reasons))
 
     return jsonify(
@@ -399,6 +381,7 @@ def scan_file():
             "verdict": verdict,
             "reasons": reasons,
             "virustotal": vt_result,
+            "magic_check": magic_result,
         }
     )
 
