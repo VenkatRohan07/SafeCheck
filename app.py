@@ -321,7 +321,7 @@ def scan_url():
     vt_result = vt_check_url(url)
     urlhaus_result = urlhaus_check_url(url)
 
-        hostname = url.split("//")[-1].split("/")[0].split(":")[0]
+    hostname = url.split("//")[-1].split("/")[0].split(":")[0]
     abuseipdb_result = abuseipdb_check_host(hostname)
 
     verdict, reasons = combine_verdict(vt_result, urlhaus_result, abuseipdb_result)
