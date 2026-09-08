@@ -11,6 +11,32 @@ function formatDateTime(isoString) {
   return `${date} ${time}`;
 }
 
+// Footer year
+const footerYear = document.getElementById("footer-year");
+if (footerYear) footerYear.textContent = new Date().getFullYear();
+
+// Security news feed
+async function loadNews() {
+  const list = document.getElementById("news-list");
+  try {
+    const res = await fetch("/news");
+    const articles = await res.json();
+    if (!articles.length) {
+      list.innerHTML = `<li class="news-empty">No news available right now.</li>`;
+      return;
+    }
+    list.innerHTML = articles
+      .map(
+        (a) =>
+          `<li><a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.title}</a> <span class="news-source">— ${a.source}</span></li>`
+      )
+      .join("");
+  } catch (err) {
+    list.innerHTML = `<li class="news-empty">Couldn't load news right now.</li>`;
+  }
+}
+loadNews();
+
 tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     tabButtons.forEach((b) => {
