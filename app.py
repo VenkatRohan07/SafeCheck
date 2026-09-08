@@ -356,7 +356,7 @@ def scan_file():
         os.remove(filepath)
         return jsonify({"error": "File exceeds 32MB limit for this scanner"}), 400
 
-        sha256 = hashlib.sha256()
+    sha256 = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
