@@ -267,8 +267,8 @@ def abuseipdb_check_host(hostname):
         return {"error": str(e)}
 
 def fetch_security_news():
-    """Fetches recent cybersecurity headlines, cached for 30 minutes
-    to stay well within NewsAPI's free-tier daily request limit."""
+    """Fetches recent cybersecurity headlines from dedicated security
+    news outlets, cached for 30 minutes to stay within the free-tier quota."""
     now = time.time()
     if NEWS_CACHE["articles"] and (now - NEWS_CACHE["fetched_at"] < NEWS_CACHE_TTL):
         return NEWS_CACHE["articles"]
@@ -280,7 +280,8 @@ def fetch_security_news():
         r = requests.get(
             "https://newsapi.org/v2/everything",
             params={
-                "q": "cybersecurity OR data breach OR malware",
+                "q": "cybersecurity",
+                "domains": "thehackernews.com,bleepingcomputer.com,krebsonsecurity.com,darkreading.com,securityweek.com",
                 "language": "en",
                 "sortBy": "publishedAt",
                 "pageSize": 5,
@@ -292,8 +293,10 @@ def fetch_security_news():
         articles = [
             {
                 "title": a["title"],
+                "description": a.get("description") or "",
                 "source": a["source"]["name"],
                 "url": a["url"],
+                "published_at": a.get("publishedAt", ""),
             }
             for a in data.get("articles", [])
             if a.get("title") and a.get("url")
@@ -302,7 +305,7 @@ def fetch_security_news():
         NEWS_CACHE["fetched_at"] = now
         return articles
     except (requests.RequestException, KeyError, ValueError):
-        return NEWS_CACHE["articles"]  # serve stale cache if the API call fails
+        return NEWS_CACHE["articles"]
 
 
 def combine_verdict(vt=None, urlhaus=None, abuseipdb=None, magic=None):
