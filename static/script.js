@@ -11,28 +11,99 @@ function formatDateTime(isoString) {
   return `${date} ${time}`;
 }
 
-// Footer year
-const footerYear = document.getElementById("footer-year");
-if (footerYear) footerYear.textContent = new Date().getFullYear();
+// Footer typing animation — loops continuously at a moderate pace
+const FOOTER_TEXT = `© ${new Date().getFullYear()} SafeCheck — built by V V Rohan Sasi Vardhan`;
+const footerTyped = document.getElementById("footer-typed");
+const TYPE_SPEED = 70;   // ms per character while typing
+const ERASE_SPEED = 35;  // ms per character while erasing
+const HOLD_TIME = 1800;  // pause once fully typed, before erasing
 
-// Security news feed
+function runTypingLoop() {
+  let i = 0;
+  let typing = true;
+
+  function step() {
+    if (typing) {
+      i++;
+      footerTyped.textContent = FOOTER_TEXT.slice(0, i);
+      if (i >= FOOTER_TEXT.length) {
+        typing = false;
+        setTimeout(step, HOLD_TIME);
+        return;
+      }
+      setTimeout(step, TYPE_SPEED);
+    } else {
+      i--;
+      footerTyped.textContent = FOOTER_TEXT.slice(0, i);
+      if (i <= 0) {
+        typing = true;
+        setTimeout(step, 500);
+        return;
+      }
+      setTimeout(step, ERASE_SPEED);
+    }
+  }
+  step();
+}
+
+if (footerTyped) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    footerTyped.textContent = FOOTER_TEXT;
+  } else {
+    runTypingLoop();
+  }
+}
+
+// Security news — one full article at a time, auto-rotating
+let newsArticles = [];
+let newsIndex = 0;
+let newsRotationTimer = null;
+
+function renderNewsArticle() {
+  const container = document.getElementById("news-article");
+  if (!container) return;
+
+  if (!newsArticles.length) {
+    container.innerHTML = `<div class="news-empty">No cybersecurity news available right now.</div>`;
+    return;
+  }
+
+  const a = newsArticles[newsIndex];
+  const dateStr = a.published_at
+    ? new Date(a.published_at).toLocaleDateString()
+    : "";
+
+  const dots = newsArticles
+    .map((_, idx) => `<span class="news-dot${idx === newsIndex ? " active" : ""}"></span>`)
+    .join("");
+
+  container.innerHTML = `
+    <h3 class="news-title"><a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.title}</a></h3>
+    <p class="news-description">${a.description || "No summary available for this article."}</p>
+    <div class="news-meta">
+      <span>${a.source}${dateStr ? " · " + dateStr : ""}</span>
+      <span class="news-dots">${dots}</span>
+    </div>
+  `;
+}
+
 async function loadNews() {
-  const list = document.getElementById("news-list");
   try {
     const res = await fetch("/news");
-    const articles = await res.json();
-    if (!articles.length) {
-      list.innerHTML = `<li class="news-empty">No news available right now.</li>`;
-      return;
+    newsArticles = await res.json();
+    newsIndex = 0;
+    renderNewsArticle();
+
+    if (newsRotationTimer) clearInterval(newsRotationTimer);
+    if (newsArticles.length > 1) {
+      newsRotationTimer = setInterval(() => {
+        newsIndex = (newsIndex + 1) % newsArticles.length;
+        renderNewsArticle();
+      }, 8000);
     }
-    list.innerHTML = articles
-      .map(
-        (a) =>
-          `<li><a href="${a.url}" target="_blank" rel="noopener noreferrer">${a.title}</a> <span class="news-source">— ${a.source}</span></li>`
-      )
-      .join("");
   } catch (err) {
-    list.innerHTML = `<li class="news-empty">Couldn't load news right now.</li>`;
+    const container = document.getElementById("news-article");
+    if (container) container.innerHTML = `<div class="news-empty">Couldn't load news right now.</div>`;
   }
 }
 loadNews();
